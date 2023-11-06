@@ -84,7 +84,7 @@ public class PnpmComponentDetector : FileComponentDetector
                         continue;
                     }
 
-                    var childDetectedComponent = PnpmParsingUtilities.CreateDetectedComponentFromPnpmPath(pnpmPackagePath: this.CreatePnpmPackagePathFromDependency(dependency.Key, dependency.Value));
+                    var childDetectedComponent = PnpmParsingUtilities.CreateDetectedComponentFromPnpmPath(pnpmPackagePath: this.CreatePnpmPackagePathFromDependency(dependency.Key, dependency.Value.Split('(')[0]));
 
                     // Older code used the root's dev dependency value. We're leaving this null until we do a second pass to look at each components' top level referrers.
                     singleFileComponentRecorder.RegisterUsage(childDetectedComponent, parentComponentId: parentDetectedComponent.Component.Id, isDevelopmentDependency: null);
@@ -113,6 +113,6 @@ public class PnpmComponentDetector : FileComponentDetector
 
     private string CreatePnpmPackagePathFromDependency(string dependencyName, string dependencyVersion)
     {
-        return dependencyVersion.Contains('/') ? dependencyVersion : $"/{dependencyName}/{dependencyVersion}";
+        return dependencyVersion.Contains('/') ? dependencyVersion : $"/{dependencyName}@{dependencyVersion}";
     }
 }

@@ -1,12 +1,16 @@
 ﻿namespace Microsoft.ComponentDetection.Detectors.Pnpm;
 
 using System;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using global::NuGet.Versioning;
 using Microsoft.ComponentDetection.Contracts;
 using Microsoft.ComponentDetection.Contracts.TypedComponent;
+using Microsoft.Extensions.Logging;
 using YamlDotNet.Serialization;
 
 public static class PnpmParsingUtilities
@@ -38,7 +42,17 @@ public static class PnpmParsingUtilities
 
     private static (string Name, string Version) ExtractNameAndVersionFromPnpmPackagePath(string pnpmPackagePath)
     {
-        var pnpmComponentDefSections = pnpmPackagePath.Trim('/').Split('/');
+        if (pnpmPackagePath.Contains("github.com"))
+        {
+            // e.g. github.com/ax-vasquez/is-my-json-valid/b875c39b07f757593d9b9123e023b8fd2c350a0c
+            var parts = pnpmPackagePath.Split('/');
+            var name = string.Join("/", parts.Take(parts.Length - 1));
+            var version = parts[^1];
+            return (name, version);
+        }
+
+        var pnpmComponentDefSections = Regex.Split(pnpmPackagePath.Trim('/'), @"(?<=\))|(?=\()");
+
         (var packageVersion, var indexVersionIsAt) = GetPackageVersion(pnpmComponentDefSections);
         if (indexVersionIsAt == -1)
         {
@@ -46,7 +60,7 @@ public static class PnpmParsingUtilities
             return (null, null);
         }
 
-        var normalizedPackageName = string.Join("/", pnpmComponentDefSections.Take(indexVersionIsAt).ToArray());
+        var normalizedPackageName = string.Join("/", pnpmComponentDefSections[0].Split($"@{packageVersion}"));
         return (normalizedPackageName, packageVersion);
     }
 
@@ -55,6 +69,21 @@ public static class PnpmParsingUtilities
         var indexVersionIsAt = -1;
         var packageVersion = string.Empty;
         var lastIndex = pnpmComponentDefSections.Length - 1;
+
+        // get version from packages with format /mute-stream@0.0.6
+        var firstSection = pnpmComponentDefSections[0];
+
+        // ensure this works with @packages (e.g. @babel/core)
+        if (firstSection.StartsWith('@'))
+        {
+            firstSection = firstSection[1..];
+        }
+
+        var parts = firstSection.Split('@');
+        if (parts.Length > 1 && SemanticVersion.TryParse(parts[1], out var _))
+        {
+            return (parts[1], lastIndex);
+        }
 
         // get version from packages with format /mute-stream/0.0.6
         if (SemanticVersion.TryParse(pnpmComponentDefSections[lastIndex], out var _))
